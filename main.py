@@ -51,6 +51,8 @@ motors_calibrated = False
 
 green_LED = Pin(25, Pin.OUT)
 
+# Example change
+
 
 def flashLED(numberFlashes):
     for i in range(numberFlashes):
@@ -406,11 +408,6 @@ def alignWithWall():        # This function serves to align the robot exactly pa
         gyroRotate(angle, 45)
     else:
         flashLED(4)
-
-
-def newFunction():
-    # Tests git
-    drive(1000,50,0,driveTime=1)
 
 
 
