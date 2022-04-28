@@ -5,7 +5,7 @@ from ultrasonic import sonic
 from encoder import Encoder
 import gyroscope
 import testing
-from numpy import cos, pi
+# from numpy import cos, pi
 
 print("Program starting...")
 
@@ -169,7 +169,7 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
     # Diameter = 65mm
 
     D = 65              # Diameter of wheel
-    circumference = pi * D
+    circumference = 3.1415926 * D
 
     enc.clear_count()
     leftDist = 0
@@ -418,10 +418,13 @@ while True:
         sleep(1)
         calibrateMotors()
 
-    sleep(3)
+    sleep(1)
     flashLED(3)     # Three flashes of the green_LED indicate the start of the loop
 
     # driveTowardsNearestWall()
     # getDistanceFromLine()                     # Working alright. Random noise value is about -0.3
     followWall(200)                             # Working reasonably well. Assumes robot starts parallel to wall
     # followLine()
+
+    # dist_front = ultrasonic_sensor_front.distance_mm()
+    # print(dist_front)
