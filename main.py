@@ -45,13 +45,18 @@ adc_A0 = ADC(Pin(26))
 adc_A1 = ADC(Pin(27))
 adc_A2 = ADC(Pin(28))
 
+
+# Extra wide IR sensors
+IR_left = Pin(22, Pin.IN)
+IR_right = Pin(21, Pin.IN)
+
+
+green_LED = Pin(25, Pin.OUT)
+
 # global powerOffset
 powerOffset = 0.0
 motors_calibrated = False
 
-green_LED = Pin(25, Pin.OUT)
-
-# Example change
 
 
 def flashLED(numberFlashes):
@@ -182,7 +187,12 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
     initialTime = time()
     elapsedTime = 0
 
-    while (leftDist + rightDist) / 2 < abs(distance) and elapsedTime < driveTime and dist_front > dist_front_threshold:       # Take an average of distance from each wheel, also prevents drive from running longer than driveTime seconds
+    while (leftDist + rightDist) / 2 < abs(distance) and elapsedTime < driveTime:       # Take an average of distance from each wheel, also prevents drive from running longer than driveTime seconds
+        if dist_front < dist_front_threshold:
+            motor_left.duty(0)
+            motor_right.duty(0)
+            break
+
         leftDist = circumference * enc.get_left() / 20
         rightDist = circumference * enc.get_right() / 20    # 1 revolution = 20 clicks, wheel travels distance of 1 circumference in 1 revolution
 
@@ -250,7 +260,7 @@ def followWall(distanceFromWall):
             # D := distanceFromWall
 
 
-        robotAngle += drive(50, 40, powerBalance, desired_servo_angle - robotAngle, driveTime=0.5)                            # Update powerBalance every 50mm or 0.5s
+        robotAngle += drive(50, 40, powerBalance, desired_servo_angle - robotAngle, driveTime=0.2)                            # Update powerBalance every 50mm or 0.5s
 
         # The above line of code both calls drive() - robot drives forward - and also adds the robot's change in angle to robotAngle
         # robotAngle can then be combined with desired_servo_angle because drive() resets the '0' heading everytime it is called
@@ -298,21 +308,45 @@ def getAveIRValue():
 def followLine():
     setServoAngle(90)       # Facing straight ahead
     sleep(0.5)
-    distAhead = ultrasonic_sensor.distance_mm()
+    # distAhead = ultrasonic_sensor.distance_mm()
+    dist_front = ultrasonic_sensor_front.distance_mm()
 
-    while distAhead > 200:
+    maxD = 5
+
+    # 200, 5000
+    dThreshold = 200
+
+    while dist_front > dThreshold and getAveIRValue() > 0:       # white = 5000, black = 14000
         line_dist = getDistanceFromLine()
-        powerBalance = line_dist / 30
+        # print("Line distance:", line_dist)
+        factor = 3
+        powerBalance = line_dist / (maxD * factor)
+        # print("Power balance:", powerBalance)
 
         # Maps distance from line to powerBalance variable:
         # [-30, 30] -> [-1.0, 1.0]   (turn left when line is left of robot, turn right when line is right of robot)
 
-        drive(50, 40, powerBalance, 0, driveTime=0.1)     # Drives for 50mm inrements without changing powerBalance
+        drive(4000, 45, powerBalance, 0, driveTime=0.1, dist_front_threshold=200)     # Drives for 50mm inrements without changing powerBalance
 
         distAhead = ultrasonic_sensor.distance_mm()
 
+    stop(0.4)
+
     # A thought: Maybe we can use the straight line track segment to calibrate the robot's motors to drive in a straight line
     # This could be done by adding some 'offset' to the powerBalance variable
+
+
+
+# Detects if a line segment has branched out and returns the side, if none is detected or both is detected, "None" is returned
+def detectBranch():
+    output = "None"
+
+    if IR_left.value() == 0 and IR_right.value() == 1:
+        output = "Left"
+    elif IR_left.value() == 1 and IR_right.value() == 0:
+        output = "Right"
+
+    return output
 
 
 def calibrateMotors():
@@ -413,7 +447,7 @@ def alignWithWall():        # This function serves to align the robot exactly pa
 
 
 while True:
-    updatePowerOffset(-0.1)         # Comment this out if the motors should be calibrated before running
+    updatePowerOffset(0.05)         # Comment this out if the motors should be calibrated before running
     if not motors_calibrated:
         sleep(1)
         calibrateMotors()
@@ -423,8 +457,8 @@ while True:
 
     # driveTowardsNearestWall()
     # getDistanceFromLine()                     # Working alright. Random noise value is about -0.3
-    followWall(200)                             # Working reasonably well. Assumes robot starts parallel to wall
-    # followLine()
+    # followWall(200)                             # Working reasonably well. Assumes robot starts parallel to wall
+    followLine()
 
     # dist_front = ultrasonic_sensor_front.distance_mm()
     # print(dist_front)
