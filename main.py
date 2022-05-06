@@ -45,6 +45,8 @@ adc_A0 = ADC(Pin(26))
 adc_A1 = ADC(Pin(27))
 adc_A2 = ADC(Pin(28))
 
+IR_offsets = [200, -500, -6300]
+
 
 # Extra wide IR sensors
 IR_left = Pin(22, Pin.IN)
@@ -280,9 +282,9 @@ def followWall(distanceFromWall):
 
 
 def getDistanceFromLine():
-    w0 = adc_A0.read_u16()
-    w1 = adc_A1.read_u16()
-    w2 = adc_A2.read_u16()
+    w0 = adc_A0.read_u16() + IR_offsets[0]
+    w1 = adc_A1.read_u16() + IR_offsets[1]
+    w2 = adc_A2.read_u16() + IR_offsets[2]
 
     print(w0, w1, w2)
 
@@ -296,13 +298,35 @@ def getDistanceFromLine():
     return line_dist
 
 def getAveIRValue():
-    w0 = adc_A0.read_u16()
-    w1 = adc_A1.read_u16()
-    w2 = adc_A2.read_u16()
+    w0 = adc_A0.read_u16() + IR_offsets[0]
+    w1 = adc_A1.read_u16() + IR_offsets[1]
+    w2 = adc_A2.read_u16() + IR_offsets[2]
 
     ave = (w0+w1+w2)/3
     print("Average IR value:", ave)
     return ave
+
+def lineDetected(threshold):
+
+    # Readings for white paper:
+    # w0 -> 5800
+    # w1 -> 6500
+    # w2 -> 11000
+
+    w = [0,0,0]
+    w[0] = adc_A0.read_u16() + IR_offsets[0]
+    w[1] = adc_A1.read_u16() + IR_offsets[1]
+    w[2] = adc_A2.read_u16() + IR_offsets[2]
+
+    print(w)
+
+    # for x in w:
+    #     if x > threshold:
+    #         return True
+    #
+    # return False
+
+    return True
 
 
 def followLine():
@@ -310,13 +334,18 @@ def followLine():
     sleep(0.5)
     # distAhead = ultrasonic_sensor.distance_mm()
     dist_front = ultrasonic_sensor_front.distance_mm()
+    if dist_front < 0:
+        dist_front = 500
 
     maxD = 5
 
     # 200, 5000
     dThreshold = 200
 
-    while dist_front > dThreshold and getAveIRValue() > 0:       # white = 5000, black = 14000
+    drive(10000,45,0,0,driveTime=0.1)
+
+    while dist_front > dThreshold and lineDetected(6000):       # white = 5000, black = 14000
+        print("Following")
         line_dist = getDistanceFromLine()
         # print("Line distance:", line_dist)
         factor = 3
@@ -326,14 +355,55 @@ def followLine():
         # Maps distance from line to powerBalance variable:
         # [-30, 30] -> [-1.0, 1.0]   (turn left when line is left of robot, turn right when line is right of robot)
 
-        drive(4000, 45, powerBalance, 0, driveTime=0.1, dist_front_threshold=200)     # Drives for 50mm inrements without changing powerBalance
+        drive(4000, 30, powerBalance, 0, driveTime=0.01, dist_front_threshold=200, servoLock=False)     # Drives for 50mm inrements without changing powerBalance
+        # stop(0.1)       # This does stop-start so that the robot can react better
 
-        distAhead = ultrasonic_sensor.distance_mm()
+        # distAhead = ultrasonic_sensor.distance_mm()
+        dist_front = ultrasonic_sensor_front.distance_mm()
+        if dist_front < 0:
+            dist_front = dThreshold + 10
+        # print("Distance in front:", dist_front)
 
+    print("exit")
     stop(0.4)
 
     # A thought: Maybe we can use the straight line track segment to calibrate the robot's motors to drive in a straight line
     # This could be done by adding some 'offset' to the powerBalance variable
+
+
+    # Thoughts - can put the robot to a higher torque initially to get it going, then reduce the power once it has started moving
+
+
+def newFollowLine():
+    IR_threshold = 6000
+
+    w = [0, 0, 0]
+    w[0] = adc_A0.read_u16()    # Left
+    w[1] = adc_A1.read_u16()    # Middle
+    w[2] = adc_A2.read_u16()    # Right
+
+
+
+    # If middle sensor is on line, go straight ahead
+
+    # Until middle sensor is off line
+
+    power = 40
+    t = 0.1         # drive time
+
+
+    if IR_left.value() == 0:    # Black
+        stop(0.2)
+
+
+    if w[1] > IR_threshold:
+        drive(1000, power, 0, 0, driveTime=t)
+
+    else:
+        pass
+
+
+
 
 
 
@@ -341,6 +411,7 @@ def followLine():
 def detectBranch():
     output = "None"
 
+    # Calibrate the IR potentiometer threshold
     if IR_left.value() == 0 and IR_right.value() == 1:
         output = "Left"
     elif IR_left.value() == 1 and IR_right.value() == 0:
