@@ -5,7 +5,9 @@ from ultrasonic import sonic
 from encoder import Encoder
 import gyroscope
 import testing
+# import numpy
 # from numpy import cos, pi
+import random
 
 print("Program starting...")
 
@@ -37,15 +39,32 @@ enc = Encoder(ENC_L, ENC_R)
 
 
 # For IR sensors - distance from centreline
-x0 = -15
+x0 = -10
 x1 = 0
-x2 = 15
+x2 = 10
 
 adc_A0 = ADC(Pin(26))
 adc_A1 = ADC(Pin(27))
 adc_A2 = ADC(Pin(28))
 
 IR_offsets = [200, -500, -6300]
+IR_factors = [1, 1, 0.]
+
+'''
+On white paper:
+    left - 7000
+    middle - 8000
+    right - 13600
+
+    average - 7870
+
+On black line:
+    left - 51000
+    middle - 40600
+    right - 14000
+    
+    average - 35200
+'''
 
 
 # Extra wide IR sensors
@@ -282,9 +301,9 @@ def followWall(distanceFromWall):
 
 
 def getDistanceFromLine():
-    w0 = adc_A0.read_u16() + IR_offsets[0]
-    w1 = adc_A1.read_u16() + IR_offsets[1]
-    w2 = adc_A2.read_u16() + IR_offsets[2]
+    w0 = adc_A0.read_u16()
+    w1 = adc_A1.read_u16()
+    w2 = adc_A2.read_u16()
 
     print(w0, w1, w2)
 
@@ -298,35 +317,25 @@ def getDistanceFromLine():
     return line_dist
 
 def getAveIRValue():
-    w0 = adc_A0.read_u16() + IR_offsets[0]
-    w1 = adc_A1.read_u16() + IR_offsets[1]
-    w2 = adc_A2.read_u16() + IR_offsets[2]
 
-    ave = (w0+w1+w2)/3
+    w = getIRValues()
+
+    ave = (w[0] + w[1] + w[2])/3
     print("Average IR value:", ave)
     return ave
 
 def lineDetected(threshold):
 
-    # Readings for white paper:
-    # w0 -> 5800
-    # w1 -> 6500
-    # w2 -> 11000
-
-    w = [0,0,0]
-    w[0] = adc_A0.read_u16() + IR_offsets[0]
-    w[1] = adc_A1.read_u16() + IR_offsets[1]
-    w[2] = adc_A2.read_u16() + IR_offsets[2]
-
+    w = getIRValues()
     print(w)
 
-    # for x in w:
-    #     if x > threshold:
-    #         return True
-    #
-    # return False
+    for x in w:
+        if x > threshold:
+            print("Line")
+            return True
 
-    return True
+    print("No line")
+    return False
 
 
 def followLine():
@@ -344,7 +353,7 @@ def followLine():
 
     drive(10000,45,0,0,driveTime=0.1)
 
-    while dist_front > dThreshold and lineDetected(6000):       # white = 5000, black = 14000
+    while dist_front > dThreshold and lineDetected(7000):       # white = 5000, black = 14000
         print("Following")
         line_dist = getDistanceFromLine()
         # print("Line distance:", line_dist)
@@ -355,7 +364,7 @@ def followLine():
         # Maps distance from line to powerBalance variable:
         # [-30, 30] -> [-1.0, 1.0]   (turn left when line is left of robot, turn right when line is right of robot)
 
-        drive(4000, 30, powerBalance, 0, driveTime=0.01, dist_front_threshold=200, servoLock=False)     # Drives for 50mm inrements without changing powerBalance
+        drive(4000, 40, powerBalance, 0, driveTime=0.01, dist_front_threshold=200, servoLock=False)     # Drives for 50mm inrements without changing powerBalance
         # stop(0.1)       # This does stop-start so that the robot can react better
 
         # distAhead = ultrasonic_sensor.distance_mm()
@@ -516,6 +525,69 @@ def alignWithWall():        # This function serves to align the robot exactly pa
 
 
 
+def getIRValues():
+    left = adc_A0.read_u16()
+    middle = adc_A1.read_u16()
+    right = adc_A2.read_u16()
+
+    # if right > 20000:
+    #     right *= 0.35
+    # elif right > 10000:
+    #     right *= 0.5
+
+
+    return left, middle, right
+
+
+
+
+def getIRAverages():
+    IR_0 = []           # Left
+    IR_1 = []           # Middle
+    IR_2 = []           # Right
+
+    sum_0 = 0
+    sum_1 = 0
+    sum_2 = 0
+
+    for i in range(1000):
+        # IR_0.append(adc_A0.read_u16())
+        # IR_1.append(adc_A1.read_u16())
+        # IR_2.append(adc_A2.read_u16())
+
+        sum_0 += adc_A0.read_u16()
+        sum_1 += adc_A1.read_u16()
+        sum_2 += adc_A2.read_u16()
+
+        sleep(0.01)
+
+    ave_0 = sum_0/1000
+    ave_1 = sum_1/1000
+    ave_2 = sum_2/1000
+
+    print(ave_0, ave_1, ave_2)
+
+    return ave_0, ave_1, ave_2
+
+
+
+def roundabout():
+    stop(0.5)
+    drive(1000, 40, 0, 0, driveTime=1)
+
+    angle = 90*random.randint(-1, 1)    # Either, -90, 0, or 90
+    gyroRotate(angle, 40)
+
+    drive(1000, 40, 0, 0, driveTime=1)
+
+
+
+# while True:
+#     getIRAverages()
+#     # print(adc_A0.read_u16(), adc_A1.read_u16(), adc_A2.read_u16())
+#     sleep(2)
+
+
 
 while True:
     updatePowerOffset(0.05)         # Comment this out if the motors should be calibrated before running
@@ -533,3 +605,12 @@ while True:
 
     # dist_front = ultrasonic_sensor_front.distance_mm()
     # print(dist_front)
+
+
+
+# if __name__ == "__main__":
+#     sleep(1)
+#     testing.plot_IR_readings()
+
+
+
