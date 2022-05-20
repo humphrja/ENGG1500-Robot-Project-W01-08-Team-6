@@ -4,7 +4,7 @@ from machine import Pin, PWM, ADC
 from ultrasonic import sonic
 from encoder import Encoder
 import gyroscope
-import testing
+# import testing
 # import numpy
 # from numpy import cos, pi
 import random
@@ -175,7 +175,7 @@ def driveTowardsNearestWall():
 
 
 
-def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, servoLock=True, dist_front_threshold=200):
+def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, servoLock=False, dist_front_threshold=200, desiredBearing=0, gyroLock=False):
     # distance (mm) is a float whereby positive represents forwards and negative backwards
     # power is a float in range [0,100] (percentage), power represents the average power of both the motors
     # powerBalance is a float in range [-1,1], whereby 0 represents both motors at same power, +1 represents turning right where the right motor is at 0 power, -1 represents turning left where left motor is at 0 power
@@ -189,6 +189,8 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
         left_power = 100
     if right_power > 100:
         right_power = 100  # This ensures that power can't be greater than 100
+
+    print("Power balance:", powerBalance, ". Powers:", left_power, ",", right_power)
 
 
     # Every revolution of each wheel = 20 clicks
@@ -204,6 +206,8 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
     gyroAngle = 0
 
     dist_front = ultrasonic_sensor_front.distance_mm()
+    if dist_front < 0:
+        dist_front = 1000
 
     initialTime = time()
     elapsedTime = 0
@@ -212,12 +216,8 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
         if dist_front < dist_front_threshold:
             motor_left.duty(0)
             motor_right.duty(0)
+            print("Obstacle detected in front:", dist_front)
             break
-
-        leftDist = circumference * enc.get_left() / 20
-        rightDist = circumference * enc.get_right() / 20    # 1 revolution = 20 clicks, wheel travels distance of 1 circumference in 1 revolution
-
-        # print("Encoders:", enc.get_left(), enc.get_right())
 
         if distance > 0:
             motor_left.set_forwards()
@@ -229,6 +229,11 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
         motor_left.duty(int(left_power))
         motor_right.duty(int(right_power))
 
+        if gyroLock:
+            gyroAngle += gyroscope.getAngle('Z', 0.1)
+            stop(0.1)
+            gyroRotate(-gyroAngle, 40)
+
         if servoLock:                                           # This condition is used if the servo should not be locked to a specified bearing
             gyroAngle += gyroscope.getAngle('Z', 0.1)           # Sets the servo to the desired angle
             servoAngle = gyroAngle + 90 - desired_servo_angle
@@ -236,7 +241,15 @@ def drive(distance, power, powerBalance, desired_servo_angle, driveTime=100.0, s
             setServoAngle(servoAngle)
 
         dist_front = ultrasonic_sensor_front.distance_mm()
+        if dist_front < 0:
+            dist_front = 1000
         elapsedTime = time() - initialTime
+
+        leftDist = circumference * enc.get_left() / 20
+        rightDist = circumference * enc.get_right() / 20  # 1 revolution = 20 clicks, wheel travels distance of 1 circumference in 1 revolution
+        print("Encoders:", enc.get_left(), enc.get_right())
+
+    print("Final distances:", leftDist, rightDist)
 
     return gyroAngle
 
@@ -480,7 +493,7 @@ def gyroRotate(angle, power):
 
     gyroAngle = 0
     while abs(gyroAngle) < abs(angle):
-        gyroAngle += gyroscope.getAngle('Z', 0.1)
+        gyroAngle += gyroscope.getAngle('Z', 0.05)
 
     motor_left.duty(0)
     motor_right.duty(0)
@@ -541,34 +554,6 @@ def getIRValues():
 
 
 
-def getIRAverages():
-    IR_0 = []           # Left
-    IR_1 = []           # Middle
-    IR_2 = []           # Right
-
-    sum_0 = 0
-    sum_1 = 0
-    sum_2 = 0
-
-    for i in range(1000):
-        # IR_0.append(adc_A0.read_u16())
-        # IR_1.append(adc_A1.read_u16())
-        # IR_2.append(adc_A2.read_u16())
-
-        sum_0 += adc_A0.read_u16()
-        sum_1 += adc_A1.read_u16()
-        sum_2 += adc_A2.read_u16()
-
-        sleep(0.01)
-
-    ave_0 = sum_0/1000
-    ave_1 = sum_1/1000
-    ave_2 = sum_2/1000
-
-    print(ave_0, ave_1, ave_2)
-
-    return ave_0, ave_1, ave_2
-
 
 
 def roundabout():
@@ -581,6 +566,138 @@ def roundabout():
     drive(1000, 40, 0, 0, driveTime=1)
 
 
+def detectLineType():
+    lineType = ""
+
+    if lineDetected(8000) and IR_right.value() == 0 and IR_left.value() == 0:
+        lineType = "T"
+
+    elif lineDetected(8000) and IR_right.value() == 1 and IR_left.value() == 0:
+        lineType = "left branch"
+
+    elif lineDetected(8000) and IR_right.value() == 0 and IR_left.value() == 1:
+        lineType = "right branch"
+
+    elif lineDetected(7000) and IR_right.value() == 1 and IR_left.value() == 1:
+        lineType = "straight"
+
+    elif not lineDetected(8000) and IR_right.value() == 1 and IR_left.value() == 0:
+        lineType = "left L"
+
+    elif not lineDetected(8000) and IR_right.value() == 1 and IR_left.value() == 0:
+        lineType = "right L"
+
+    elif not lineDetected(7000) and IR_right.value() == 0 and IR_left.value() == 0:
+        lineType = "horizontal line"
+
+    else:
+        lineType = "xxxx"
+
+    print(lineType)
+    return lineType
+
+
+def findGarageExit():
+    # This function serves to align the robot exactly perpendicular to the exit. It assumes the robot starts within the garage
+    # Make robot do a slow 360 degree rotation with servo fixed facing straight ahead relative to the robot
+    # During rotation record distances for every degree
+    # After rotation, find the maximum distance and corresponding angle, theta
+    # Rotate robot to theta
+
+    minDist = 100000
+    theta = 0
+
+    setServoAngle(90)
+
+    motor_left.set_forwards()
+    motor_right.set_backwards()
+    motor_left.duty(45)
+    motor_right.duty(45)
+
+    gyroAngle = 0
+    while gyroAngle < 360:
+        dist = ultrasonic_sensor.distance_mm()
+        if dist < minDist:
+            minDist = dist
+            theta = gyroAngle
+
+        gyroAngle += gyroscope.getAngle('Z', 0.1)
+
+    stop(0.5)
+
+    angle = (theta + 90) % 360  # Theta is angle towards wall. 'angle' is angle by which robot should rotate
+    if angle > 180:
+        angle -= 360
+
+    if minDist != 100000:
+        gyroRotate(angle, 45)
+    else:
+        flashLED(4)
+
+
+def middleTrackSection():
+    # Exit the garage
+    # Align with straight middle section
+    # Drive straight, all the way through both roundabouts
+    # Exit function when wall is detected
+
+
+    # Exit garage:
+    # findGarageExit()
+    # drive(10000, 50, 0, 0, driveTime=3, servoLock=False)
+    # stop(0.2)
+
+    # Align with straight section
+    # gyroRotate(-90, 40)
+    # stop(0.2)
+    # drive(10000, 50, 0, 0, driveTime=20, servoLock=False, gyroLock=True, desiredBearing=0)        # This should stop when a wall is detected in front
+    # stop(0.2)
+
+
+    gyroRotate(-30, 40)
+
+    stop(0.2)
+    offset = 0.025
+    totalAngle = 0
+
+    drive(10000, 50, offset, 0, driveTime=0.1)
+    while not lineDetected(6000):
+        drive(10000, 35, offset, 0, driveTime=0.1)
+        dAngle = gyroscope.getAngle('Z', 0.05)
+        offset = -dAngle / 100
+        totalAngle += dAngle
+        print("Offset:", offset)
+
+    stop(1)
+
+    getDistances()      # Servo sweep
+
+
+
+    # drive(10000, 40, 0, 0, driveTime=0.3)
+    # stop(0.3)
+
+
+    # gyroRotate(-45, 40)
+    # stop(0.2)
+
+
+    duration = 10
+
+    stop(0.2)
+    offset = 0
+    totalAngle = 0
+
+    initialTime = time()
+    while time() - initialTime < duration:
+        drive(10000, 50, offset, 0, driveTime=0.1)
+        dAngle = gyroscope.getAngle('Z', 0.05)
+        offset = -dAngle/100
+        totalAngle += dAngle
+        print("Offset:", offset)
+
+    stop(1)
+
 
 # while True:
 #     getIRAverages()
@@ -589,28 +706,31 @@ def roundabout():
 
 
 
-while True:
-    updatePowerOffset(0.05)         # Comment this out if the motors should be calibrated before running
-    if not motors_calibrated:
-        sleep(1)
-        calibrateMotors()
-
-    sleep(1)
-    flashLED(3)     # Three flashes of the green_LED indicate the start of the loop
+# while True:
+    # updatePowerOffset(0.05)         # Comment this out if the motors should be calibrated before running
+    # if not motors_calibrated:
+    #     sleep(1)
+    #     calibrateMotors()
+    #
+    # sleep(1)
+    # flashLED(3)     # Three flashes of the green_LED indicate the start of the loop
 
     # driveTowardsNearestWall()
     # getDistanceFromLine()                     # Working alright. Random noise value is about -0.3
     # followWall(200)                             # Working reasonably well. Assumes robot starts parallel to wall
-    followLine()
+    # followLine()
 
     # dist_front = ultrasonic_sensor_front.distance_mm()
     # print(dist_front)
+    #
+    # detectLineType()
+    # sleep(0.2)
 
 
 
-# if __name__ == "__main__":
-#     sleep(1)
-#     testing.plot_IR_readings()
-
+if __name__ == "__main__":
+    updatePowerOffset(0.025)
+    middleTrackSection()
+    print("Finished.")
 
 

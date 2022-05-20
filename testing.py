@@ -276,30 +276,30 @@ def plot_IR_readings():
 
 
 
-# def getIRAverages():
-#     IR_0 = []           # Left
-#     IR_1 = []           # Middle
-#     IR_2 = []           # Right
-#
-#     sum_0 = 0
-#     sum_1 = 0
-#     sum_2 = 0
-#
-#     for i in range(1000):
-#         # IR_0.append(adc_A0.read_u16())
-#         # IR_1.append(adc_A1.read_u16())
-#         # IR_2.append(adc_A2.read_u16())
-#
-#         sum_0 += adc_A0.read_u16()
-#         sum_1 += adc_A1.read_u16()
-#         sum_2 += adc_A2.read_u16()
-#
-#         time.sleep(0.01)
-#
-#     ave_0 = sum_0/1000
-#     ave_1 = sum_1/1000
-#     ave_2 = sum_2/1000
-#
-#     print(ave_0, ave_1, ave_2)
-#
-#     return ave_0, ave_1, ave_2
+def getIRAverages():
+    IR_0 = []           # Left
+    IR_1 = []           # Middle
+    IR_2 = []           # Right
+
+    sum_0 = 0
+    sum_1 = 0
+    sum_2 = 0
+
+    for i in range(1000):
+        # IR_0.append(adc_A0.read_u16())
+        # IR_1.append(adc_A1.read_u16())
+        # IR_2.append(adc_A2.read_u16())
+
+        sum_0 += adc_A0.read_u16()
+        sum_1 += adc_A1.read_u16()
+        sum_2 += adc_A2.read_u16()
+
+        sleep(0.01)
+
+    ave_0 = sum_0/1000
+    ave_1 = sum_1/1000
+    ave_2 = sum_2/1000
+
+    print(ave_0, ave_1, ave_2)
+
+    return ave_0, ave_1, ave_2
