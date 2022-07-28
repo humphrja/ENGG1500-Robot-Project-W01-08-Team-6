@@ -727,6 +727,30 @@ def middleTrackSection():
     # sleep(0.2)
 
 
+def driveStraight(power):
+
+    gyroAngle = 0
+    prevGyroAngle = 0
+
+    sensitivity = 1
+
+    motor_left.set_forwards()
+    motor_right.set_forwards()
+    while ultrasonic_sensor.distance_mm() < 0 or ultrasonic_sensor.distance_mm() > 100:
+        gyroAngle += gyroscope.getAngle('Z', 0.1)
+
+        difference = gyroAngle*sensitivity
+
+        motor_left.duty(power - difference)
+        motor_right.duty(power + difference)
+
+        prevGyroAngle = gyroAngle
+
+    stop(1)
+
+
+
+
 
 if __name__ == "__main__":
     updatePowerOffset(0.025)
